@@ -1,8 +1,16 @@
 FROM ubuntu
+# Update the repository sources list
 RUN apt-get update
-ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get -y install apache2
-RUN apt-get -y install apache2-utils
-COPY index.html /var/www/html
+
+# Install and run apache
+RUN apt-get install -y apache2 && apt-get clean
+
+#ENTRYPOINT ["/usr/sbin/apache2", "-k", "start"]
+
+
+#ENV APACHE_RUN_USER www-data
+#ENV APACHE_RUN_GROUP www-data
+#ENV APACHE_LOG_DIR /var/log/apache2
+
 EXPOSE 80
-CMD ["apache2ctl", "-D", "FOREGROUND"]
+CMD apachectl -D FOREGROUND
