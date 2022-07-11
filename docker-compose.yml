@@ -1,24 +1,104 @@
-version: "3.9"
-   
+version: '3.7'
+
 services:
-  db:
-    image: IMAGE_NAME
-    volumes:
-      - ./data/db:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_DB=postgres
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-  web:
-    build: .
-    command: python manage.py runserver 0.0.0.0:8000
-    volumes:
-      - .:/code
+  mysqldb:
+    image: mysql:5.7
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      replicas: 1
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2048M
+        #reservations:
+        #  cpus: '0.5'
+        #  memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 120s
     ports:
-      - "8000:8000"
+      - 3306:3306
+      - 33060:33060
+    healthcheck:
+      test: "/usr/bin/mysql --user=root --password=Qma123 --execute \"SHOW DATABASES;\""
+      interval: 30s
+      timeout: 10s
+      retries: 3
+#    command: --default-authentication-plugin=mysql_native_password --secure-file-priv=""   # This Option only used for MySQL 8.0
     environment:
-      - POSTGRES_NAME=postgres
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      MYSQL_ROOT_PASSWORD: Qma123
+#    secrets:
+#      - db_root_password
+    volumes:
+      - /var/lib/mysql:/var/lib/mysql:rw
+    networks: 
+      - mysqldb
+
+  Redis-cache:
+    image: redis:6.2-alpine
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      replicas: 1
+    restart: always
+    ports:
+      - 6379:6379
+    command: redis-server --save 20 1 --loglevel warning --requirepass eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81
+    volumes: 
+      - /cache:/data:rw
+    networks: 
+      - mysqldb      
+
+  quality-metrics-automation:
+    image: quality-metrics:0.0.8
     depends_on:
-      - db
+      - mysqldb
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      replicas: 1
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        #reservations:
+        #  cpus: '0.5'
+        #  memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+    ports:
+      - 8000:8000
+    healthcheck:
+      test: curl -s http://localhost:8000 || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    environment:
+      SQL_NAME: quality_metrics
+      SQL_USER: qma_dev_user
+      SQL_PASSWORD: qma_dev@123
+      SQL_HOST: 34.139.43.123
+      SQL_PORT: 3306
+      REDISHOST: 34.139.43.123
+      REDISPORT: 6379
+      REDISPASSWORD: eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81
+      JIRAUSERNAME: s.chandra
+      JIRAPASSWORD: Ctb@181E25575
+    networks: 
+      - mysqldb    
+
+#secrets:
+#  db_root_password:
+#    external: true
+
+networks:
+  mysqldb:
+    driver: overlay 
+    driver_opts:
+      encrypted: "true"    
