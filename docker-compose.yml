@@ -1,104 +1,32 @@
-version: '3.7'
+version: '3'
 
 services:
-  mysqldb:
-    image: mysql:5.7
-    deploy:
-      placement:
-        constraints: [node.role == manager]
-      replicas: 1
-      resources:
-        limits:
-          cpus: "1"
-          memory: 2048M
-        #reservations:
-        #  cpus: '0.5'
-        #  memory: 512M
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 5
-        window: 120s
-    ports:
-      - 3306:3306
-      - 33060:33060
-    healthcheck:
-      test: "/usr/bin/mysql --user=root --password=Qma123 --execute \"SHOW DATABASES;\""
-      interval: 30s
-      timeout: 10s
-      retries: 3
-#    command: --default-authentication-plugin=mysql_native_password --secure-file-priv=""   # This Option only used for MySQL 8.0
+  web:
+    image: IMAGE_NAME
+    command:
+      - /bin/sh
+      - -c
+      - |
+          echo "Instalando postgresql"
+          export PGDATA=/opt/postgresql/data
+          wget https://gist.githubusercontent.com/nenodias/28ac55b9ad3fda43a9de63a9efb82d18/raw/c4c75e8b89d2a20b02e56a54d3446a69a2c00e29/postgres_install.py
+          chmod -Rf 777 /opt
+          useradd postgres
+          su -c "python postgres_install.py" -s /bin/sh postgres
+          echo "Concluído"
+          cd ${working_dir}
+          git clone https://github.com/nenodias/millenium.git project
+          cd project
+          git checkout deploy
+          git pull origin deploy
+          /usr/local/bin/pip install -r requirements.txt
+          echo "App starting"
+          /usr/local/bin/gunicorn wsgi:application --bind=0.0.0.0:8000
     environment:
-      MYSQL_ROOT_PASSWORD: Qma123
-#    secrets:
-#      - db_root_password
+        DATABASE_URL: postgresql://postgres@127.0.0.1:5432/millenium
     volumes:
-      - /var/lib/mysql:/var/lib/mysql:rw
-    networks: 
-      - mysqldb
-
-  Redis-cache:
-    image: redis:6.2-alpine
-    deploy:
-      placement:
-        constraints: [node.role == manager]
-      replicas: 1
-    restart: always
+      - ./postgres-data:/opt/postgresql/data
+      - ${PWD}/project:/home/docker/
+    working_dir: /home/docker/
     ports:
-      - 6379:6379
-    command: redis-server --save 20 1 --loglevel warning --requirepass eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81
-    volumes: 
-      - /cache:/data:rw
-    networks: 
-      - mysqldb      
-
-  quality-metrics-automation:
-    image: quality-metrics:0.0.8
-    depends_on:
-      - mysqldb
-    deploy:
-      placement:
-        constraints: [node.role == manager]
-      replicas: 1
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 512M
-        #reservations:
-        #  cpus: '0.5'
-        #  memory: 256M
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 5
-        window: 120s
-    ports:
-      - 8000:8000
-    healthcheck:
-      test: curl -s http://localhost:8000 || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    environment:
-      SQL_NAME: quality_metrics
-      SQL_USER: qma_dev_user
-      SQL_PASSWORD: qma_dev@123
-      SQL_HOST: 34.139.43.123
-      SQL_PORT: 3306
-      REDISHOST: 34.139.43.123
-      REDISPORT: 6379
-      REDISPASSWORD: eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81
-      JIRAUSERNAME: s.chandra
-      JIRAPASSWORD: Ctb@181E25575
-    networks: 
-      - mysqldb    
-
-#secrets:
-#  db_root_password:
-#    external: true
-
-networks:
-  mysqldb:
-    driver: overlay 
-    driver_opts:
-      encrypted: "true"    
+      - "8000:8000"
